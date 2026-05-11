@@ -1,0 +1,36 @@
+[package]
+name = "robin"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Robin - Self-hosted AI agent gateway (CLI)"
+
+[[bin]]
+name = "robin"
+path = "src/main.rs"
+
+[dependencies]
+robin-internal = { path = "../robin-internal" }
+
+tokio = { workspace = true }
+clap = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+reqwest = { workspace = true }
+tokio-tungstenite = { workspace = true }
+futures-util = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+base64 = { workspace = true }
+url = { workspace = true }
+pulldown-cmark = { workspace = true }
+crossterm = { workspace = true }
+once_cell = { workspace = true }
+parking_lot = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

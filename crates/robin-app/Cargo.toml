@@ -1,0 +1,35 @@
+[package]
+name = "robin-app"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Robin - Self-hosted AI agent gateway (Desktop App)"
+
+[[bin]]
+name = "robin-app"
+path = "src/main.rs"
+
+[dependencies]
+robin-internal = { path = "../robin-internal" }
+
+tokio = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+reqwest = { workspace = true }
+which = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
+# System tray
+[target.'cfg(target_os = "macos")'.dependencies]
+tray-icon = "0.15"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+tray-icon = "0.15"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+tray-icon = "0.15"

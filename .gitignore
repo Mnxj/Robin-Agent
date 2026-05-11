@@ -1,0 +1,20 @@
+# Rust build artifacts
+/target/
+**/*.rs.bk
+
+# Package / release artifacts
+/dist/*
+!/dist/.gitkeep
+*.tar.gz
+*.zip
+
+# Local runtime data
+.robin/
+*.log
+
+# Environment / editor / OS files
+.env
+.env.*
+.DS_Store
+.idea/
+.vscode/

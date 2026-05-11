@@ -1,0 +1,12 @@
+pub mod auth;
+pub mod chat;
+pub mod jobs;
+pub mod logs;
+pub mod mcp;
+pub mod memory;
+pub mod metrics;
+pub mod server;
+pub mod settings;
+pub mod skills;
+pub mod ui;
+pub mod websocket;
