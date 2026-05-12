@@ -638,6 +638,29 @@ html.light #header .logo {
 	display: none;
 }
 #stop-btn:hover { opacity: 0.85; }
+
+/* Modal Styles */
+.modal {
+	display: none;
+	position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%;
+	background-color: rgba(0,0,0,0.5);
+	align-items: center; justify-content: center;
+}
+.modal-content {
+	background-color: var(--bg);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	padding: 1.5rem;
+	width: 300px;
+	box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+.modal-content h3 { margin-top: 0; margin-bottom: 1rem; font-size: 1.1rem; color: var(--text); }
+.form-group { margin-bottom: 1rem; }
+.form-group label { display: block; margin-bottom: 0.3rem; font-size: 0.85rem; color: var(--text-dim); }
+.form-group input, .form-group select { width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); box-sizing: border-box; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.5rem; }
+.modal-actions button { padding: 0.4rem 0.8rem; border-radius: 4px; cursor: pointer; border: 1px solid var(--border); background: none; color: var(--text); }
+.modal-actions button.primary { background: var(--accent); color: var(--btn-text); border: none; }
 </style>
 </head>
 <body>
@@ -646,9 +669,6 @@ html.light #header .logo {
 	<select id="agent-select" title="Select agent"></select>
 	<select id="session-select" title="Select session"></select>
 	<button id="new-session-btn" title="New session">+ New</button>
-	<select id="skill-select" title="Start new session with skill" style="margin-left: 0.2rem; border: 1px solid var(--border); border-radius: 6px; background: none; color: var(--text); padding: 0.3rem;">
-		<option value="">+ Skill</option>
-	</select>
 	<span class="spacer"></span>
 	<span id="token-chip" title="Tokens used / context window">—</span>
 	<button id="toggle-tools-btn" title="Hide/show tool calls">Tools</button>
@@ -680,6 +700,27 @@ html.light #header .logo {
 		<button id="attach-btn" title="Attach images">Attach</button>
 		<button id="send-btn" disabled>Send</button>
 		<button id="stop-btn">Stop</button>
+	</div>
+</div>
+
+<!-- New Session Modal -->
+<div id="new-session-modal" class="modal">
+	<div class="modal-content">
+		<h3>Create New Session</h3>
+		<div class="form-group">
+			<label>Session Name (optional)</label>
+			<input type="text" id="new-session-name" placeholder="Leave empty for timestamp">
+		</div>
+		<div class="form-group">
+			<label>Attach Skill (optional)</label>
+			<select id="new-session-skill">
+				<option value="">None</option>
+			</select>
+		</div>
+		<div class="modal-actions">
+			<button id="new-session-cancel">Cancel</button>
+			<button id="new-session-confirm" class="primary">Create</button>
+		</div>
 	</div>
 </div>
 
@@ -1194,7 +1235,11 @@ html.light #header .logo {
 		}));
 	});
 
-	var skillSelect = document.getElementById('skill-select');
+	var newSessionModal = document.getElementById('new-session-modal');
+	var newSessionName = document.getElementById('new-session-name');
+	var newSessionSkill = document.getElementById('new-session-skill');
+	var newSessionCancel = document.getElementById('new-session-cancel');
+	var newSessionConfirm = document.getElementById('new-session-confirm');
 
 	fetch('/settings/api/skills').then(r => r.json()).then(res => {
 		if(res && res.skills) {
@@ -1202,36 +1247,40 @@ html.light #header .logo {
 				var opt = document.createElement('option');
 				opt.value = s.name;
 				opt.textContent = s.name;
-				skillSelect.appendChild(opt);
+				newSessionSkill.appendChild(opt);
 			});
 		}
 	}).catch(e => console.error("Failed to load skills", e));
 
-	skillSelect.addEventListener('change', function() {
-		var skill = skillSelect.value;
-		if (!skill) return;
-		skillSelect.value = ''; // Reset back to default
-		
-		if (!ws || ws.readyState !== WebSocket.OPEN) return;
-		var name = prompt('New session for skill [' + skill + '] (leave empty for timestamp):');
-		if (name === null) return; // cancelled
-		ws.send(JSON.stringify({
-			jsonrpc: '2.0',
-			method: 'session.new',
-			params: { agentId: agentSelect.value, name: name || '' },
-			id: 'session-new-skill:' + skill
-		}));
-	});
-
 	newSessionBtn.addEventListener('click', function() {
 		if (!ws || ws.readyState !== WebSocket.OPEN) return;
-		var name = prompt('Session name (leave empty for timestamp):');
-		if (name === null) return; // cancelled
+		newSessionName.value = '';
+		newSessionSkill.value = '';
+		newSessionModal.style.display = 'flex';
+		newSessionName.focus();
+	});
+
+	newSessionCancel.addEventListener('click', function() {
+		newSessionModal.style.display = 'none';
+	});
+
+	newSessionModal.addEventListener('click', function(e) {
+		if (e.target === newSessionModal) {
+			newSessionModal.style.display = 'none';
+		}
+	});
+
+	newSessionConfirm.addEventListener('click', function() {
+		var name = newSessionName.value.trim();
+		var skill = newSessionSkill.value;
+		newSessionModal.style.display = 'none';
+		
+		var reqId = skill ? ('session-new-skill:' + skill) : 'session-new';
 		ws.send(JSON.stringify({
 			jsonrpc: '2.0',
 			method: 'session.new',
-			params: { agentId: agentSelect.value, name: name || '' },
-			id: 'session-new'
+			params: { agentId: agentSelect.value, name: name },
+			id: reqId
 		}));
 	});
 
