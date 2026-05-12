@@ -213,7 +213,7 @@ pub fn start_gateway(config_path: &str, version: &str) -> anyhow::Result<crate::
     let config_surface: Arc<dyn ConfigSurface> = Arc::new(ConfigAdapter(cfg.clone()));
 
     // Session store wrapping the on-disk JSONL store.
-    let session_store_inner = SessionStore::new(&data_dir);
+    let session_store_inner = SessionStore::new(format!("{}/sessions", data_dir));
     let session_store: Arc<dyn SessionStoreTrait> = Arc::new(SessionStoreAdapter(session_store_inner.clone()));
 
     // Skills: serve files from ~/.robin/skills
@@ -332,7 +332,7 @@ pub async fn build_in_process_runtime(
     let data_dir = cfg.data_dir();
     let bash_policy = bash_exec_policy(&cfg);
 
-    let session_store = SessionStore::new(&data_dir);
+    let session_store = SessionStore::new(format!("{}/sessions", data_dir));
 
     let skills_dir = std::path::PathBuf::from(&data_dir).join("skills");
     std::fs::create_dir_all(&skills_dir).ok();
