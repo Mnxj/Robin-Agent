@@ -33,8 +33,8 @@ impl Store {
         })
     }
 
-    fn session_dir(&self, agent_id: &str) -> PathBuf {
-        self.base_dir.join(agent_id)
+    fn session_dir(&self, _agent_id: &str) -> PathBuf {
+        self.base_dir.clone()
     }
 
     fn session_path(&self, agent_id: &str, key: &str) -> PathBuf {

@@ -712,10 +712,10 @@ html.light #header .logo {
 			<input type="text" id="new-session-name" placeholder="Leave empty for timestamp">
 		</div>
 		<div class="form-group">
-			<label>Attach Skill (optional)</label>
-			<select id="new-session-skill">
-				<option value="">None</option>
-			</select>
+			<label>Attach Skills (optional)</label>
+			<div id="new-session-skills-container" style="max-height: 120px; overflow-y: auto; border: 1px solid var(--border); border-radius: 4px; padding: 0.5rem; background: var(--bg); display: flex; flex-direction: column; gap: 0.4rem;">
+				<!-- checkboxes injected here -->
+			</div>
 		</div>
 		<div class="modal-actions">
 			<button id="new-session-cancel">Cancel</button>
@@ -1237,17 +1237,26 @@ html.light #header .logo {
 
 	var newSessionModal = document.getElementById('new-session-modal');
 	var newSessionName = document.getElementById('new-session-name');
-	var newSessionSkill = document.getElementById('new-session-skill');
+	var newSessionSkillsContainer = document.getElementById('new-session-skills-container');
 	var newSessionCancel = document.getElementById('new-session-cancel');
 	var newSessionConfirm = document.getElementById('new-session-confirm');
 
 	fetch('/settings/api/skills').then(r => r.json()).then(res => {
 		if(res && res.skills) {
 			res.skills.forEach(function(s) {
-				var opt = document.createElement('option');
-				opt.value = s.name;
-				opt.textContent = s.name;
-				newSessionSkill.appendChild(opt);
+				var lbl = document.createElement('label');
+				lbl.style.display = 'flex';
+				lbl.style.alignItems = 'center';
+				lbl.style.gap = '0.5rem';
+				lbl.style.cursor = 'pointer';
+				
+				var cb = document.createElement('input');
+				cb.type = 'checkbox';
+				cb.value = s.name;
+				
+				lbl.appendChild(cb);
+				lbl.appendChild(document.createTextNode(s.name));
+				newSessionSkillsContainer.appendChild(lbl);
 			});
 		}
 	}).catch(e => console.error("Failed to load skills", e));
@@ -1255,7 +1264,8 @@ html.light #header .logo {
 	newSessionBtn.addEventListener('click', function() {
 		if (!ws || ws.readyState !== WebSocket.OPEN) return;
 		newSessionName.value = '';
-		newSessionSkill.value = '';
+		var cbs = newSessionSkillsContainer.querySelectorAll('input[type="checkbox"]');
+		cbs.forEach(cb => cb.checked = false);
 		newSessionModal.style.display = 'flex';
 		newSessionName.focus();
 	});
@@ -1272,10 +1282,11 @@ html.light #header .logo {
 
 	newSessionConfirm.addEventListener('click', function() {
 		var name = newSessionName.value.trim();
-		var skill = newSessionSkill.value;
+		var checked = newSessionSkillsContainer.querySelectorAll('input[type="checkbox"]:checked');
+		var skills = Array.from(checked).map(cb => cb.value);
 		newSessionModal.style.display = 'none';
 		
-		var reqId = skill ? ('session-new-skill:' + skill) : 'session-new';
+		var reqId = skills.length > 0 ? ('session-new-skills:' + skills.join(',')) : 'session-new';
 		ws.send(JSON.stringify({
 			jsonrpc: '2.0',
 			method: 'session.new',
@@ -1594,10 +1605,10 @@ html.light #header .logo {
 							id: 'session-switch'
 						}));
 						
-						// If a skill was selected, auto-fill input
-						if (resp.id.startsWith('session-new-skill:')) {
-							var skillName = resp.id.split(':')[1];
-							inputEl.value = 'Please use the `' + skillName + '` skill to \n\n';
+						// If skills were selected, auto-fill input
+						if (resp.id.startsWith('session-new-skills:')) {
+							var skillNames = resp.id.split(':')[1].split(',');
+							inputEl.value = 'Please use the `' + skillNames.join('`, `') + '` skills to \n\n';
 							inputEl.focus();
 							inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length);
 						} else {

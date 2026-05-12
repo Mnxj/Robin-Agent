@@ -54,7 +54,7 @@ mod tests {
         assert_eq!(history.len(), 2);
 
         // Check file exists.
-        let path = dir.path().join("agent1").join("test_peer.jsonl");
+        let path = dir.path().join("test_peer.jsonl");
         assert!(path.exists());
     }
 
