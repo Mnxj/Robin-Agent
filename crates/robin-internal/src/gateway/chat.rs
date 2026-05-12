@@ -328,7 +328,7 @@ html.light #header .logo {
 	color: var(--text);
 	transition: border-color 0.3s;
 }
-#clear-btn {
+#clear-btn, #settings-btn {
 	background: none;
 	border: 1px solid var(--border);
 	border-radius: 6px;
@@ -338,6 +338,11 @@ html.light #header .logo {
 	line-height: 1;
 	color: var(--text);
 	transition: border-color 0.3s;
+	text-decoration: none;
+}
+#settings-btn {
+	display: inline-flex;
+	align-items: center;
 }
 #messages {
 	flex: 1;
@@ -645,6 +650,7 @@ html.light #header .logo {
 	<span id="token-chip" title="Tokens used / context window">—</span>
 	<button id="toggle-tools-btn" title="Hide/show tool calls">Tools</button>
 	<button id="toggle-trace-btn" title="Hide/show live trace panel">Trace</button>
+	<a href="/settings" target="_blank" id="settings-btn" title="Open settings">Settings</a>
 	<button id="clear-btn" title="Clear session">Clear</button>
 	<button id="theme-btn" title="Toggle light/dark mode">&#9790;</button>
 	<span class="status" id="conn-status">connecting...</span>
