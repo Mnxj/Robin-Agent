@@ -91,10 +91,6 @@ command -v cortex && cortex --version
 
 If `cortex` is not found, install before running any other command in this skill:
 
-- **From source (any platform with Go)**: `go install github.com/sausheong/cortex/cmd/cortex@latest` (binary lands in `$GOBIN` or `$GOPATH/bin` — make sure that directory is on `PATH`).
-- **macOS (Homebrew)**: `brew install sausheong/tap/cortex` (if available; otherwise use the `go install` route).
-- **Robin-bundled**: Robin may ship its own embedded Cortex; in that case use the in-process tools rather than the CLI.
-
 After installing, re-check with `cortex --version` before continuing. If installation fails, ask the user how they'd like to proceed.
 
 ## Notes

@@ -7,7 +7,6 @@ use tracing::{debug, info, warn};
 
 use crate::config::config::{CortexConfig, MemoryConfig, ProviderConfig};
 
-/// Mirrors `conversation.Message` from `github.com/sausheong/cortex`.
 #[derive(Clone, Debug)]
 pub struct Message {
     pub role: String,

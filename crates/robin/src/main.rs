@@ -15,7 +15,7 @@ use robin_internal::config::config::{
 };
 use robin_internal::llm::provider::{new_provider, parse_provider_model, ProviderOptions};
 use robin_internal::session::store::Store as SessionStore;
-use robin_internal::startup::startup::{resolve_provider_opts, start_gateway};
+use robin_internal::startup::startup::{build_in_process_runtime, resolve_provider_opts, start_gateway};
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 const COMMIT: &str = match option_env!("GIT_COMMIT") {
@@ -163,7 +163,9 @@ async fn run_chat(
     model_override: String,
     no_gateway: bool,
 ) -> anyhow::Result<()> {
-    let cfg = load_config(&config_path).map_err(|e| anyhow::anyhow!("load config: {}", e))?;
+    let cfg = std::sync::Arc::new(
+        load_config(&config_path).map_err(|e| anyhow::anyhow!("load config: {}", e))?,
+    );
 
     // Resolve agent ID: prefer "default", else first agent in list.
     if agent_id.is_empty() {
@@ -207,75 +209,24 @@ async fn run_chat(
         }
     }
 
-    // ── In-process REPL path ──────────────────────────────────────────────────
-    //
-    // The full in-process REPL requires the agent runtime, skills, memory,
-    // cortex, tools, MCP, cron, and compaction — all of which are stubs with
-    // todo!() in the current robin-internal codebase. The provider resolution
-    // and session-store wiring below are fully implemented; the runtime
-    // construction is deferred pending those stubs.
-
     let model_str = if model_override.is_empty() {
         agent_cfg.model.clone()
     } else {
         model_override.clone()
     };
 
-    let (provider_name_from_model, _model_name) = parse_provider_model(&model_str);
-    let provider_name = if !provider_name_from_model.is_empty() {
-        provider_name_from_model.to_string()
-    } else {
-        let (pn, _) = parse_provider_model(&agent_cfg.model);
-        if !pn.is_empty() {
-            pn.to_string()
+    let runtime = build_in_process_runtime(
+        cfg.clone(),
+        &agent_id,
+        "cli_local",
+        if model_override.is_empty() {
+            None
         } else {
-            "anthropic".to_string()
-        }
-    };
-
-    let opts = resolve_provider_opts(&provider_name, &cfg);
-    if opts.api_key.is_empty() && opts.kind != "openai-compatible" {
-        anyhow::bail!(
-            "no API key set for provider {:?} (set {}_API_KEY or {}_AUTH_TOKEN env var)",
-            provider_name,
-            provider_name.to_uppercase(),
-            provider_name.to_uppercase()
-        );
-    }
-
-    let _provider = new_provider(
-        &provider_name,
-        ProviderOptions {
-            api_key: opts.api_key,
-            base_url: opts.base_url,
-            kind: opts.kind,
-            ca_bundle: opts.ca_bundle,
+            Some(model_str.as_str())
         },
     )
-    .map_err(|e| anyhow::anyhow!("create LLM provider: {}", e))?;
+    .await?;
 
-    // Session store
-    let data_dir = default_data_dir();
-    let sessions_dir = Path::new(&data_dir).join("sessions");
-    std::fs::create_dir_all(&sessions_dir).ok();
-    let session_store = SessionStore::new(&sessions_dir);
-    let _sess = session_store
-        .load(&agent_id, "cli_local")
-        .map_err(|e| anyhow::anyhow!("load session: {}", e))?;
-
-    // In-process REPL: wire to agent runtime once robin-internal stubs are
-    // filled in (agent::build_runtime_for_agent, skills, memory, cortex,
-    // tools, mcp, cron, compaction).
-    eprintln!(
-        "In-process REPL for agent {:?} (model: {}) — agent runtime stubs pending.",
-        agent_id, model_str
-    );
-    eprintln!(
-        "Start 'robin start' and re-run 'robin chat' to use the gateway path instead."
-    );
-
-    // Interactive REPL loop (gateway path already handles slash commands;
-    // in-process path will be wired once the runtime stubs are complete).
     println!(
         "Robin chat — agent {:?} (model: {})",
         agent_id, model_str
@@ -303,10 +254,53 @@ async fn run_chat(
             println!("Goodbye!");
             return Ok(());
         }
-        eprintln!(
-            "(In-process agent runtime not yet wired — \
-             start the gateway with 'robin start' and reconnect.)"
-        );
+
+        let ctx = tokio_util::sync::CancellationToken::new();
+        let mut ev_rx = runtime.run(ctx, input, vec![]).await?;
+        let mut response_text = String::new();
+        loop {
+            match ev_rx.recv().await {
+                None => break,
+                Some(ev) => {
+                    let raw = match ev.event_type {
+                        robin_internal::agent::AgentEventType::TextDelta => {
+                            serde_json::json!({"type":"text_delta","text": ev.text})
+                        }
+                        robin_internal::agent::AgentEventType::ToolCallStart => {
+                            let tc = ev.tool_call.unwrap_or_default();
+                            serde_json::json!({"type":"tool_call_start","tool": tc.name,"id": tc.id,"input": tc.input})
+                        }
+                        robin_internal::agent::AgentEventType::ToolResult => {
+                            let tc = ev.tool_call.unwrap_or_default();
+                            let res = ev.result.unwrap_or_default();
+                            serde_json::json!({"type":"tool_result","tool": tc.name,"id": tc.id,"input": tc.input,"output": res.output,"error": res.error})
+                        }
+                        robin_internal::agent::AgentEventType::CompactionStart => {
+                            serde_json::json!({"type":"compaction.start"})
+                        }
+                        robin_internal::agent::AgentEventType::CompactionDone => {
+                            let c = ev.compaction.unwrap_or_default();
+                            serde_json::json!({"type":"compaction.done","turnsCompacted": c.turns_compacted,"durationMs": c.duration_ms})
+                        }
+                        robin_internal::agent::AgentEventType::CompactionSkipped => {
+                            let c = ev.compaction.unwrap_or_default();
+                            let reason = c.reason.map(|r| r.to_string()).unwrap_or_default();
+                            serde_json::json!({"type":"compaction.skipped","reason": reason,"skipped": c.skipped})
+                        }
+                        robin_internal::agent::AgentEventType::Done => serde_json::json!({"type":"done"}),
+                        robin_internal::agent::AgentEventType::Error => {
+                            let msg = ev.error.map(|e| e.to_string()).unwrap_or_default();
+                            serde_json::json!({"type":"error","message": msg})
+                        }
+                        robin_internal::agent::AgentEventType::Aborted => serde_json::json!({"type":"aborted"}),
+                    };
+
+                    if repl_ws::render_turn_event(&raw, &mut response_text)? {
+                        break;
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -314,7 +308,7 @@ async fn run_chat(
 
 fn run_clear(agent_id: &str) -> anyhow::Result<()> {
     let data_dir = default_data_dir();
-    let store = SessionStore::new(Path::new(&data_dir).join("sessions"));
+    let store = SessionStore::new(&data_dir);
     store
         .delete(agent_id, "cli_local")
         .map_err(|e| anyhow::anyhow!("clear session: {}", e))?;
@@ -326,7 +320,7 @@ fn run_clear(agent_id: &str) -> anyhow::Result<()> {
 
 fn run_sessions(agent_id: &str) -> anyhow::Result<()> {
     let data_dir = default_data_dir();
-    let store = SessionStore::new(Path::new(&data_dir).join("sessions"));
+    let store = SessionStore::new(&data_dir);
     let sessions = store
         .list(agent_id)
         .map_err(|e| anyhow::anyhow!("list sessions: {}", e))?;

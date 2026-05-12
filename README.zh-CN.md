@@ -2,7 +2,7 @@
 
 `Robin` 是一个用 Rust 编写的本地自托管 AI Agent 网关。单二进制、低内存、默认运行在你的机器上。
 
-英文完整版文档请见 [README.md](file:///Users/tianshi/Downloads/felix-main/felix-rust/README.md)。
+英文完整版文档请见 [README.md](README.md)。
 
 ## 项目简介
 

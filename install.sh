@@ -3,10 +3,27 @@ set -euo pipefail
 
 # One-click installer for robin CLI from GitHub Releases.
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/<owner>/<repo>/main/install.sh | bash
-#   REPO=sausheong/robin VERSION=v0.1.0 bash install.sh
 
-REPO="${REPO:-sausheong/robin}"
+default_repo() {
+  if command -v git >/dev/null 2>&1; then
+    if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      local url
+      url="$(git remote get-url origin 2>/dev/null || true)"
+      if [[ -n "$url" ]]; then
+        # Supports:
+        #   https://github.com/<owner>/<repo>.git
+        #   git@github.com:<owner>/<repo>.git
+        if [[ "$url" =~ github\.com[:/]+([^/]+)/([^/]+?)(\.git)?$ ]]; then
+          echo "${BASH_REMATCH[1]}/${BASH_REMATCH[2]}"
+          return 0
+        fi
+      fi
+    fi
+  fi
+  echo "mnxj/robin"
+}
+
+REPO="${REPO:-$(default_repo)}"
 VERSION="${VERSION:-latest}"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 TMP_DIR="$(mktemp -d)"
@@ -42,7 +59,16 @@ else
 fi
 
 echo "==> downloading ${URL}"
-curl -fL "$URL" -o "${TMP_DIR}/${ASSET}"
+if ! curl -fL "$URL" -o "${TMP_DIR}/${ASSET}"; then
+  echo "" >&2
+  echo "download failed (repo=${REPO} version=${VERSION} asset=${ASSET})" >&2
+  echo "" >&2
+  echo "Possible fixes:" >&2
+  echo "  - If this is your fork: create a tag like v0.1.0 and push it so the release workflow uploads dist/robin-<target>.tar.gz." >&2
+  echo "  - Or run: REPO=<owner>/<repo> VERSION=<tag> bash install.sh" >&2
+  echo "  - Or build from source: cargo build --release -p robin && install -m 0755 target/release/robin ${INSTALL_DIR}/robin" >&2
+  exit 1
+fi
 tar -xzf "${TMP_DIR}/${ASSET}" -C "${TMP_DIR}"
 
 if [[ ! -f "${TMP_DIR}/robin" ]]; then

@@ -1,11 +1,9 @@
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
-
     use super::super::startup::start_gateway;
 
-    #[test]
-    fn test_start_gateway_smoke() {
+    #[tokio::test]
+    async fn test_start_gateway_smoke() {
         let tmp = tempfile::tempdir().unwrap();
         std::env::set_var("HOME", tmp.path().to_str().unwrap());
 

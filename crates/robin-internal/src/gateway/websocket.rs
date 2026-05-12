@@ -88,6 +88,7 @@ pub enum HistoryEntry {
     Message {
         role: String,
         text: String,
+        images: Vec<ImageData>,
     },
     ToolCall {
         tool: String,
@@ -102,7 +103,7 @@ pub enum HistoryEntry {
     },
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ImageData {
     #[serde(rename = "mimeType")]
     pub mime_type: String,
@@ -150,6 +151,7 @@ pub trait AgentRuntime: Send + Sync {
     fn run(
         self: Arc<Self>,
         text: String,
+        images: Vec<ImageData>,
     ) -> std::pin::Pin<
         Box<dyn std::future::Future<Output = anyhow::Result<tokio::sync::mpsc::Receiver<AgentEvent>>> + Send>,
     >;
@@ -422,6 +424,12 @@ async fn handle_chat_send(
         }
     };
 
+    let images: Vec<ImageData> = req
+        .params
+        .get("images")
+        .and_then(|v| serde_json::from_value::<Vec<ImageData>>(v.clone()).ok())
+        .unwrap_or_default();
+
     let session_key_param = req
         .params
         .get("sessionKey")
@@ -468,7 +476,7 @@ async fn handle_chat_send(
     }
 
     // Start the new run
-    let mut events_rx = match runtime.run(text).await {
+    let mut events_rx = match runtime.run(text, images).await {
         Ok(rx) => rx,
         Err(e) => {
             send_error(&tx, req.id, -32603, &e.to_string());
@@ -849,11 +857,17 @@ async fn handle_session_history(
     let entries: Vec<Value> = history
         .into_iter()
         .filter_map(|entry| match entry {
-            HistoryEntry::Message { role, text } => Some(json!({
-                "type": "message",
-                "role": role,
-                "text": text,
-            })),
+            HistoryEntry::Message { role, text, images } => {
+                let mut e = json!({
+                    "type": "message",
+                    "role": role,
+                    "text": text,
+                });
+                if !images.is_empty() {
+                    e["images"] = json!(images);
+                }
+                Some(e)
+            }
             HistoryEntry::ToolCall { tool, id, input } => Some(json!({
                 "type": "tool_call",
                 "tool": tool,

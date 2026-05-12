@@ -25,7 +25,7 @@ use crate::session::{
     store::Store as SessionStore,
 };
 use crate::tools::{
-    register_send_message, BashTool, EditFileTool, Executor, LoadMemoryTool, LoadSkillTool,
+    register_send_message, BashTool, EditFileTool, ExecPolicy, Executor, LoadMemoryTool, LoadSkillTool,
     ReadFileTool, Registry as ToolRegistry, TodoWriteTool, WebFetchTool, WebSearchTool,
     WriteFileTool,
 };
@@ -207,6 +207,7 @@ pub fn start_gateway(config_path: &str, version: &str) -> anyhow::Result<crate::
     };
 
     let cfg = Arc::new(cfg);
+    let bash_policy = bash_exec_policy(&cfg);
 
     // Config surface for the WebSocket handler.
     let config_surface: Arc<dyn ConfigSurface> = Arc::new(ConfigAdapter(cfg.clone()));
@@ -255,7 +256,8 @@ pub fn start_gateway(config_path: &str, version: &str) -> anyhow::Result<crate::
     // Settings page — expose current config as JSON.
     let config_json = serde_json::to_value(&*cfg)
         .unwrap_or(serde_json::Value::Object(Default::default()));
-    let settings_tool_registry = build_tool_registry(&data_dir, &data_dir, skill_loader.clone());
+    let settings_tool_registry =
+        build_tool_registry(&data_dir, &data_dir, skill_loader.clone(), bash_policy.clone());
     let settings = SettingsHandlerState {
         config_json: Arc::new(parking_lot::RwLock::new(config_json)),
         config_path: cfg_path,
@@ -312,6 +314,107 @@ pub fn start_gateway(config_path: &str, version: &str) -> anyhow::Result<crate::
     })
 }
 
+pub async fn build_in_process_runtime(
+    cfg: Arc<Config>,
+    agent_id: &str,
+    session_key: &str,
+    model_override: Option<&str>,
+) -> anyhow::Result<Arc<crate::agent::runtime::Runtime>> {
+    let mut agent_cfg = cfg
+        .get_agent(agent_id)
+        .ok_or_else(|| anyhow::anyhow!("agent {:?} not found", agent_id))?;
+    if let Some(m) = model_override {
+        if !m.is_empty() {
+            agent_cfg.model = m.to_string();
+        }
+    }
+
+    let data_dir = cfg.data_dir();
+    let bash_policy = bash_exec_policy(&cfg);
+
+    let session_store = SessionStore::new(&data_dir);
+
+    let skills_dir = std::path::PathBuf::from(&data_dir).join("skills");
+    std::fs::create_dir_all(&skills_dir).ok();
+    let _ = seed_bundled_skills(skills_dir.to_string_lossy().as_ref())
+        .map_err(|e| warn!("seed bundled skills failed: {}", e));
+
+    let mut reload_dirs = vec![skills_dir.to_string_lossy().to_string()];
+    for a in &cfg.agents.list {
+        if a.workspace.is_empty() {
+            continue;
+        }
+        let d = std::path::PathBuf::from(&a.workspace).join("skills");
+        reload_dirs.push(d.to_string_lossy().to_string());
+    }
+    reload_dirs.sort();
+    reload_dirs.dedup();
+
+    let skill_loader = Arc::new(SkillLoader::new());
+    let refs: Vec<&str> = reload_dirs.iter().map(|s| s.as_str()).collect();
+    if let Err(e) = skill_loader.load_from(&refs) {
+        warn!("initial skill load failed: {}", e);
+    }
+
+    let memory_manager = Arc::new(MemoryManager::new(
+        std::path::PathBuf::from(&data_dir).join("memory"),
+    ));
+
+    if !session_store.exists(agent_id, session_key) {
+        session_store.create(agent_id, session_key)?;
+    }
+    let session = session_store.load(agent_id, session_key)?;
+
+    let provider_name = agent_cfg
+        .model
+        .split('/')
+        .next()
+        .unwrap_or("anthropic");
+    let pcfg = cfg.get_provider(provider_name);
+    let provider: Arc<dyn crate::llm::LLMProvider> = Arc::from(new_provider(
+        provider_name,
+        crate::llm::ProviderOptions {
+            api_key: pcfg.api_key.clone(),
+            base_url: pcfg.base_url.clone(),
+            kind: pcfg.kind.clone(),
+            ca_bundle: pcfg.ca_bundle.clone(),
+        },
+    )?);
+
+    let (memory_index, memory_manager) = if cfg.memory.enabled {
+        if let Err(e) = memory_manager.load().await {
+            warn!("memory load failed for prompt index: {}", e);
+        }
+        (memory_manager.format_index(), Some(memory_manager))
+    } else {
+        (String::new(), None)
+    };
+
+    let deps = RuntimeDeps {
+        config: Some(cfg.clone()),
+        agent_loop: cfg.agent_loop.clone(),
+        ..Default::default()
+    };
+    let inputs = RuntimeInputs {
+        provider: Some(provider),
+        tools: Some(
+            build_tool_registry(
+                &agent_cfg.workspace,
+                &cfg.data_dir(),
+                skill_loader.clone(),
+                bash_policy,
+            ) as Arc<dyn Executor>
+        ),
+        session: Some(session),
+        skills_index: skill_loader.format_index(),
+        memory_index,
+        memory_manager,
+        ..Default::default()
+    };
+
+    Ok(Arc::new(build_runtime_for_agent(deps, inputs, &agent_cfg)?))
+}
+
 // ── Skill adapters ─────────────────────────────────────────────────────────
 
 impl SkillReloader for SkillLoader {
@@ -320,7 +423,21 @@ impl SkillReloader for SkillLoader {
     }
 }
 
-fn build_tool_registry(work_dir: &str, data_dir: &str, skill_loader: Arc<SkillLoader>) -> Arc<ToolRegistry> {
+fn bash_exec_policy(cfg: &Config) -> Option<ExecPolicy> {
+    let level = cfg.security.exec_approvals.level.trim();
+    let allowlist = cfg.security.exec_approvals.allowlist.clone();
+    if level.is_empty() && allowlist.is_empty() {
+        return None;
+    }
+    Some(ExecPolicy { level: level.to_string(), allowlist })
+}
+
+fn build_tool_registry(
+    work_dir: &str,
+    data_dir: &str,
+    skill_loader: Arc<SkillLoader>,
+    bash_policy: Option<ExecPolicy>,
+) -> Arc<ToolRegistry> {
     let reg = Arc::new(ToolRegistry::new());
 
     reg.register(ReadFileTool {
@@ -334,7 +451,7 @@ fn build_tool_registry(work_dir: &str, data_dir: &str, skill_loader: Arc<SkillLo
     });
     reg.register(BashTool {
         work_dir: work_dir.to_string(),
-        exec_policy: None,
+        exec_policy: bash_policy,
     });
     reg.register(WebFetchTool);
     reg.register(WebSearchTool::new());
@@ -509,6 +626,10 @@ impl SessionStoreTrait for SessionStoreAdapter {
                         result.push(HistoryEntry::Message {
                             role: e.role.clone(),
                             text: md.text,
+                            images: md.images.iter().map(|img| WsImageData {
+                                mime_type: img.mime_type.clone(),
+                                data: img.data.clone(),
+                            }).collect(),
                         });
                     }
                 }
@@ -594,9 +715,17 @@ impl AgentBuilder for AgentBuilderImpl {
                 agent_loop: config.agent_loop.clone(),
                 ..Default::default()
             };
+            let bash_policy = bash_exec_policy(&config);
             let inputs = RuntimeInputs {
                 provider: Some(provider),
-                tools: Some(build_tool_registry(&agent_cfg.workspace, &config.data_dir(), skill_loader.clone()) as Arc<dyn Executor>),
+                tools: Some(
+                    build_tool_registry(
+                        &agent_cfg.workspace,
+                        &config.data_dir(),
+                        skill_loader.clone(),
+                        bash_policy,
+                    ) as Arc<dyn Executor>
+                ),
                 session: Some(session),
                 skills_index: skill_loader.format_index(),
                 memory_index: {
@@ -623,10 +752,22 @@ impl AgentRuntime for RuntimeAdapter {
     fn run(
         self: Arc<Self>,
         text: String,
+        images: Vec<WsImageData>,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = anyhow::Result<tokio::sync::mpsc::Receiver<WsAgentEvent>>> + Send>> {
         Box::pin(async move {
             let ctx = tokio_util::sync::CancellationToken::new();
-            let mut rx = self.0.run(ctx, text, vec![]).await?;
+            let mut decoded = Vec::with_capacity(images.len());
+            for img in images {
+                use base64::Engine;
+                let data = base64::engine::general_purpose::STANDARD
+                    .decode(img.data.as_bytes())
+                    .map_err(|e| anyhow::anyhow!("decode image base64 failed: {}", e))?;
+                decoded.push(crate::llm::ImageContent {
+                    mime_type: img.mime_type,
+                    data,
+                });
+            }
+            let mut rx = self.0.run(ctx, text, decoded).await?;
 
             let (ws_tx, ws_rx) = tokio::sync::mpsc::channel(100);
             tokio::spawn(async move {

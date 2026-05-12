@@ -44,6 +44,7 @@ pub fn minimal_runtime() -> Runtime {
         calibrator_store: None,
         calibrator: std::sync::Mutex::new(None),
         touched_files: std::sync::Mutex::new(Vec::new()),
+        memory_manager: None,
     }
 }
 

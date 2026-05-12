@@ -361,6 +361,23 @@ html.light #header .logo {
 	align-self: flex-end;
 	border-bottom-right-radius: 4px;
 }
+.msg.user .user-text {
+	white-space: pre-wrap;
+}
+.msg-images {
+	display: flex;
+	gap: 0.5rem;
+	flex-wrap: wrap;
+	margin-top: 0.5rem;
+}
+.msg-images img {
+	width: 120px;
+	height: 120px;
+	border-radius: 10px;
+	object-fit: cover;
+	border: 1px solid var(--border);
+	background: var(--bg-input);
+}
 .msg.assistant {
 	background: var(--bg-msg-asst);
 	align-self: flex-start;
@@ -502,6 +519,53 @@ html.light #header .logo {
 	flex-shrink: 0;
 	transition: background 0.3s, border-color 0.3s;
 }
+#input-left {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	min-width: 0;
+}
+#attachments {
+	display: none;
+	gap: 0.5rem;
+	flex-wrap: wrap;
+	align-items: center;
+}
+.attachment {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+	padding: 0.25rem 0.4rem;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	background: var(--bg-input);
+	max-width: 260px;
+}
+.attachment img {
+	width: 28px;
+	height: 28px;
+	border-radius: 6px;
+	object-fit: cover;
+	display: block;
+}
+.attachment .a-name {
+	font-size: 0.8rem;
+	color: var(--text-muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.attachment .a-remove {
+	border: none;
+	background: none;
+	color: var(--text-muted);
+	cursor: pointer;
+	font-size: 0.9rem;
+	line-height: 1;
+	padding: 0.2rem;
+}
+.attachment .a-remove:hover { color: var(--accent); }
 #input {
 	flex: 1;
 	background: var(--bg-input);
@@ -519,6 +583,26 @@ html.light #header .logo {
 }
 #input:focus { border-color: var(--accent); }
 #input::placeholder { color: var(--placeholder); }
+#input-right {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	justify-content: flex-end;
+}
+#attach-btn {
+	background: none;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	padding: 0 0.9rem;
+	font-size: 0.95rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition: border-color 0.2s, color 0.2s;
+	align-self: flex-end;
+	height: 40px;
+	color: var(--text);
+}
+#attach-btn:hover { border-color: var(--accent); }
 #send-btn {
 	background: var(--accent);
 	color: var(--btn-text);
@@ -578,9 +662,16 @@ html.light #header .logo {
 	<div id="trace-list"></div>
 </div>
 <div id="input-area">
-	<textarea id="input" rows="1" placeholder="Type a message..." autofocus></textarea>
-	<button id="send-btn" disabled>Send</button>
-	<button id="stop-btn">Stop</button>
+	<div id="input-left">
+		<div id="attachments"></div>
+		<textarea id="input" rows="1" placeholder="Type a message... (paste or drop an image to analyze)" autofocus></textarea>
+	</div>
+	<div id="input-right">
+		<input id="file-input" type="file" accept="image/*" multiple style="display:none;">
+		<button id="attach-btn" title="Attach images">Attach</button>
+		<button id="send-btn" disabled>Send</button>
+		<button id="stop-btn">Stop</button>
+	</div>
 </div>
 
 <script>
@@ -590,6 +681,9 @@ html.light #header .logo {
 	var wsBase = wsProto + location.host + location.pathname.replace(/\/chat\/?$/, '');
 	var messagesEl = document.getElementById('messages');
 	var inputEl = document.getElementById('input');
+	var attachmentsEl = document.getElementById('attachments');
+	var fileInputEl = document.getElementById('file-input');
+	var attachBtn = document.getElementById('attach-btn');
 	var sendBtn = document.getElementById('send-btn');
 	var connStatus = document.getElementById('conn-status');
 	var themeBtn = document.getElementById('theme-btn');
@@ -599,6 +693,149 @@ html.light #header .logo {
 	var sessionSelect = document.getElementById('session-select');
 	var newSessionBtn = document.getElementById('new-session-btn');
 	var toggleToolsBtn = document.getElementById('toggle-tools-btn');
+
+	var MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+	var pendingImages = [];
+
+	function renderAttachments() {
+		if (!pendingImages.length) {
+			attachmentsEl.style.display = 'none';
+			attachmentsEl.innerHTML = '';
+			return;
+		}
+		attachmentsEl.style.display = 'flex';
+		attachmentsEl.innerHTML = '';
+		for (var i = 0; i < pendingImages.length; i++) {
+			(function(idx) {
+				var a = pendingImages[idx];
+				var row = document.createElement('div');
+				row.className = 'attachment';
+				var img = document.createElement('img');
+				img.src = 'data:' + a.mimeType + ';base64,' + a.data;
+				img.title = a.name || 'image';
+				var name = document.createElement('div');
+				name.className = 'a-name';
+				name.textContent = a.name || 'image';
+				var rm = document.createElement('button');
+				rm.className = 'a-remove';
+				rm.title = 'Remove';
+				rm.textContent = '×';
+				rm.addEventListener('click', function() {
+					pendingImages.splice(idx, 1);
+					renderAttachments();
+				});
+				row.appendChild(img);
+				row.appendChild(name);
+				row.appendChild(rm);
+				attachmentsEl.appendChild(row);
+			})(i);
+		}
+	}
+
+	function readFileAsBase64(file) {
+		return new Promise(function(resolve, reject) {
+			var r = new FileReader();
+			r.onerror = function() { reject(new Error('read failed')); };
+			r.onload = function() {
+				var s = String(r.result || '');
+				var comma = s.indexOf(',');
+				if (comma === -1) return reject(new Error('bad data url'));
+				resolve(s.slice(comma + 1));
+			};
+			r.readAsDataURL(file);
+		});
+	}
+
+	async function addImageFile(file) {
+		if (!file) return;
+		if (!file.type || file.type.indexOf('image/') !== 0) {
+			addErrorMsg('Only image files are supported.');
+			return;
+		}
+		if (file.size > MAX_IMAGE_BYTES) {
+			addErrorMsg('Image too large (max 10 MB).');
+			return;
+		}
+		var b64 = await readFileAsBase64(file);
+		pendingImages.push({
+			mimeType: file.type || 'image/png',
+			data: b64,
+			name: file.name || 'pasted-image'
+		});
+		renderAttachments();
+	}
+
+	attachBtn.addEventListener('click', function() {
+		fileInputEl.value = '';
+		fileInputEl.click();
+	});
+	fileInputEl.addEventListener('change', function() {
+		var files = Array.prototype.slice.call(fileInputEl.files || []);
+		(async function() {
+			for (var i = 0; i < files.length; i++) {
+				await addImageFile(files[i]);
+			}
+		})().catch(function(e) {
+			addErrorMsg('Attach failed: ' + (e && e.message ? e.message : String(e)));
+		});
+	});
+
+	function handlePaste(e) {
+		if (e && e.__robin_paste_handled) return;
+		if (e) e.__robin_paste_handled = true;
+		if (!e || !e.clipboardData || !e.clipboardData.items) return;
+		var items = e.clipboardData.items;
+		var handled = false;
+		(async function() {
+			for (var i = 0; i < items.length; i++) {
+				var it = items[i];
+				if (it && it.type && it.type.indexOf('image/') === 0) {
+					var f = it.getAsFile();
+					if (f) {
+						handled = true;
+						await addImageFile(f);
+					}
+				}
+			}
+			if (handled) {
+				e.preventDefault();
+				e.stopPropagation();
+			}
+		})().catch(function(err) {
+			addErrorMsg('Paste failed: ' + (err && err.message ? err.message : String(err)));
+		});
+	}
+	document.addEventListener('paste', handlePaste);
+
+	function attachDroppedFiles(files) {
+		var list = Array.prototype.slice.call(files || []);
+		(async function() {
+			for (var i = 0; i < list.length; i++) {
+				await addImageFile(list[i]);
+			}
+		})().catch(function(err) {
+			addErrorMsg('Drop failed: ' + (err && err.message ? err.message : String(err)));
+		});
+	}
+
+	function handleDragOver(e) {
+		if (!e) return;
+		if (e.dataTransfer && e.dataTransfer.types && e.dataTransfer.types.indexOf('Files') >= 0) {
+			e.preventDefault();
+		}
+	}
+	function handleDrop(e) {
+		if (e && e.__robin_drop_handled) return;
+		if (e) e.__robin_drop_handled = true;
+		if (!e) return;
+		if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+			e.preventDefault();
+			e.stopPropagation();
+			attachDroppedFiles(e.dataTransfer.files);
+		}
+	}
+	document.addEventListener('dragover', handleDragOver);
+	document.addEventListener('drop', handleDrop);
 
 	// Tool visibility toggle
 	var toolsHidden = localStorage.getItem('robin-hide-tools') === 'true';
@@ -908,6 +1145,8 @@ html.light #header .logo {
 		messagesEl.innerHTML = '';
 		currentAssistant = null;
 		toolEls = {};
+		pendingImages = [];
+		renderAttachments();
 		resetTokenChip();
 		loadSessions();
 	});
@@ -916,6 +1155,8 @@ html.light #header .logo {
 		messagesEl.innerHTML = '';
 		currentAssistant = null;
 		toolEls = {};
+		pendingImages = [];
+		renderAttachments();
 		resetTokenChip();
 		if (!ws || ws.readyState !== WebSocket.OPEN) return;
 		// Load sessions for the new agent
@@ -933,6 +1174,8 @@ html.light #header .logo {
 		messagesEl.innerHTML = '';
 		currentAssistant = null;
 		toolEls = {};
+		pendingImages = [];
+		renderAttachments();
 		resetTokenChip();
 		ws.send(JSON.stringify({
 			jsonrpc: '2.0',
@@ -1262,7 +1505,7 @@ html.light #header .logo {
 					for (var i = 0; i < entries.length; i++) {
 						var entry = entries[i];
 						if (entry.type === 'message' && entry.role === 'user') {
-							addUserMsg(entry.text);
+							addUserMsg(entry.text, entry.images);
 						} else if (entry.type === 'message' && entry.role === 'assistant') {
 							var bubble = addAssistantMsg();
 							bubble.raw = entry.text;
@@ -1336,10 +1579,34 @@ html.light #header .logo {
 		};
 	}
 
-	function addUserMsg(text) {
+	function addUserMsg(text, images) {
 		var div = document.createElement('div');
 		div.className = 'msg user';
-		div.textContent = text;
+		
+		if (text) {
+			var textDiv = document.createElement('div');
+			textDiv.textContent = text;
+			div.appendChild(textDiv);
+		}
+
+		if (images && images.length > 0) {
+			var imgContainer = document.createElement('div');
+			imgContainer.style.display = 'flex';
+			imgContainer.style.gap = '8px';
+			imgContainer.style.flexWrap = 'wrap';
+			imgContainer.style.marginTop = text ? '8px' : '0';
+			for (var i = 0; i < images.length; i++) {
+				var img = document.createElement('img');
+				img.src = 'data:' + images[i].mimeType + ';base64,' + images[i].data;
+				img.style.maxWidth = '300px';
+				img.style.maxHeight = '300px';
+				img.style.borderRadius = '4px';
+				img.style.border = '1px solid var(--border)';
+				imgContainer.appendChild(img);
+			}
+			div.appendChild(imgContainer);
+		}
+
 		messagesEl.appendChild(div);
 		scrollToBottom();
 	}
@@ -1661,10 +1928,10 @@ html.light #header .logo {
 
 	function sendMessage() {
 		var text = inputEl.value.trim();
-		if (!text || sending) return;
+		if ((!text && !pendingImages.length) || sending) return;
 		if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
-		addUserMsg(text);
+		addUserMsg(text, pendingImages);
 		sending = true;
 		updateSendBtn();
 		msgId++;
@@ -1672,12 +1939,19 @@ html.light #header .logo {
 		ws.send(JSON.stringify({
 			jsonrpc: '2.0',
 			method: 'chat.send',
-			params: { agentId: agentSelect.value, text: text, sessionKey: sessionSelect.value },
+			params: {
+				agentId: agentSelect.value,
+				text: text,
+				sessionKey: sessionSelect.value,
+				images: pendingImages.map(function(p) { return { mimeType: p.mimeType, data: p.data }; })
+			},
 			id: msgId
 		}));
 
 		inputEl.value = '';
 		inputEl.style.height = 'auto';
+		pendingImages = [];
+		renderAttachments();
 	}
 
 	sendBtn.addEventListener('click', sendMessage);
