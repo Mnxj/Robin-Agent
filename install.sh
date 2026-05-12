@@ -20,7 +20,7 @@ default_repo() {
       fi
     fi
   fi
-  echo "mnxj/robin"
+  echo "Mnxj/Robin-Agent"
 }
 
 REPO="${REPO:-$(default_repo)}"

@@ -11,7 +11,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="${DIST_DIR:-${ROOT_DIR}/dist}"
-REPO="${REPO:-mnxj/robin}"
+REPO="${REPO:-Mnxj/Robin-Agent}"
 TAG="${TAG:-$(git describe --tags --exact-match 2>/dev/null || true)}"
 
 if [[ -z "$TAG" ]]; then

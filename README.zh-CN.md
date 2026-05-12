@@ -116,7 +116,7 @@ bash install.sh
 ## 目录结构（简要）
 
 ```text
-felix-rust/
+Robin-rust/
 ├── Cargo.toml
 ├── README.md
 ├── README.zh-CN.md

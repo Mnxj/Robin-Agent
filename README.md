@@ -62,7 +62,7 @@ Robin connects you (via CLI or web chat) to LLMs — Claude, GPT, Gemini, Qwen, 
 
 ### macOS — signed `.pkg` (recommended)
 
-Download the latest `Robin-vX.Y.Z-signed.pkg` from the [GitHub Releases](https://github.com/mnxj/robin/releases) page. Signed with Developer ID and notarized by Apple, so Gatekeeper accepts it.
+Download the latest `Robin-vX.Y.Z-signed.pkg` from the [GitHub Releases](https://github.com/Mnxj/Robin-Agent/releases) page. Signed with Developer ID and notarized by Apple, so Gatekeeper accepts it.
 
 The installer drops `Robin.app` into `/Applications`, bundles the `robin` and `robin-app` binaries, seeds the bundled starter skills, and symlinks the CLI at `/usr/local/bin/robin` so `robin chat` / `robin doctor` work in any terminal.
 
@@ -787,7 +787,7 @@ Single-process, hub-and-spoke. All components run in one binary, powered by the 
 ### Workspace layout
 
 ```
-robin-rust/
+Robin-rust/
 ├── Cargo.toml                  # Workspace manifest
 ├── install.sh                  # One-click installer
 ├── Dockerfile                  # Optional container deployment
