@@ -1964,6 +1964,10 @@ html.light #header .logo {
 
 	stopBtn.addEventListener('click', function() {
 		if (!ws || ws.readyState !== WebSocket.OPEN) return;
+		
+		sending = false;
+		updateSendBtn();
+		
 		ws.send(JSON.stringify({
 			jsonrpc: '2.0',
 			method: 'chat.abort',
