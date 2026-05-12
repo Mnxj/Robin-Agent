@@ -646,6 +646,9 @@ html.light #header .logo {
 	<select id="agent-select" title="Select agent"></select>
 	<select id="session-select" title="Select session"></select>
 	<button id="new-session-btn" title="New session">+ New</button>
+	<select id="skill-select" title="Start new session with skill" style="margin-left: 0.2rem; border: 1px solid var(--border); border-radius: 6px; background: none; color: var(--text); padding: 0.3rem;">
+		<option value="">+ Skill</option>
+	</select>
 	<span class="spacer"></span>
 	<span id="token-chip" title="Tokens used / context window">—</span>
 	<button id="toggle-tools-btn" title="Hide/show tool calls">Tools</button>
@@ -1191,6 +1194,35 @@ html.light #header .logo {
 		}));
 	});
 
+	var skillSelect = document.getElementById('skill-select');
+
+	fetch('/settings/api/skills').then(r => r.json()).then(res => {
+		if(res && res.skills) {
+			res.skills.forEach(function(s) {
+				var opt = document.createElement('option');
+				opt.value = s.name;
+				opt.textContent = s.name;
+				skillSelect.appendChild(opt);
+			});
+		}
+	}).catch(e => console.error("Failed to load skills", e));
+
+	skillSelect.addEventListener('change', function() {
+		var skill = skillSelect.value;
+		if (!skill) return;
+		skillSelect.value = ''; // Reset back to default
+		
+		if (!ws || ws.readyState !== WebSocket.OPEN) return;
+		var name = prompt('New session for skill [' + skill + '] (leave empty for timestamp):');
+		if (name === null) return; // cancelled
+		ws.send(JSON.stringify({
+			jsonrpc: '2.0',
+			method: 'session.new',
+			params: { agentId: agentSelect.value, name: name || '' },
+			id: 'session-new-skill:' + skill
+		}));
+	});
+
 	newSessionBtn.addEventListener('click', function() {
 		if (!ws || ws.readyState !== WebSocket.OPEN) return;
 		var name = prompt('Session name (leave empty for timestamp):');
@@ -1493,9 +1525,35 @@ html.light #header .logo {
 				}
 
 				// Handle session.new response
-				if (resp.id === 'session-new') {
+				if (resp.id && resp.id.toString().startsWith('session-new')) {
 					if (resp.result && resp.result.sessionKey) {
-						loadSessions();
+						// Immediately select it and reload history
+						var opt = document.createElement('option');
+						opt.value = resp.result.sessionKey;
+						opt.textContent = resp.result.sessionKey;
+						opt.selected = true;
+						sessionSelect.appendChild(opt);
+						sessionSelect.value = resp.result.sessionKey;
+						
+						messagesEl.innerHTML = '';
+						currentAssistant = null;
+						toolEls = {};
+						ws.send(JSON.stringify({
+							jsonrpc: '2.0',
+							method: 'session.switch',
+							params: { agentId: agentSelect.value, sessionKey: sessionSelect.value },
+							id: 'session-switch'
+						}));
+						
+						// If a skill was selected, auto-fill input
+						if (resp.id.startsWith('session-new-skill:')) {
+							var skillName = resp.id.split(':')[1];
+							inputEl.value = 'Please use the `' + skillName + '` skill to \n\n';
+							inputEl.focus();
+							inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length);
+						} else {
+							loadSessions();
+						}
 					}
 					return;
 				}
