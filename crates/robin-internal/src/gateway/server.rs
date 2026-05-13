@@ -13,7 +13,7 @@ use tracing::info;
 use crate::gateway::{
     auth::bearer_auth_middleware,
     chat::chat_handler,
-    logs::{logs_page_handler, logs_stream_handler, LogBuffer},
+    logs::{logs_stream_handler, LogBuffer},
     memory::{delete_memory, get_memory, list_memory, save_memory, MemoryHandlerState},
     mcp::{reauth_handler, McpHandlerState},
     metrics::Metrics,
@@ -176,6 +176,8 @@ fn build_routes(opts: &ServerOptions, ws_state: Arc<WebSocketHandlerState>) -> R
         router = router
             .route("/settings", get(settings_page_handler))
             .route("/settings/", get(settings_page_handler))
+            .route("/ui", get(settings_page_handler))
+            .route("/jobs", get(settings_page_handler))
             .route(
                 "/settings/api/config",
                 get(get_config_handler)
@@ -230,7 +232,7 @@ fn build_routes(opts: &ServerOptions, ws_state: Arc<WebSocketHandlerState>) -> R
     if let Some(log_buf) = &opts.log_buffer {
         let buf = log_buf.clone();
         router = router
-            .route("/logs", get(logs_page_handler))
+            .route("/logs", get(settings_page_handler))
             .route("/logs/stream", get(logs_stream_handler).with_state(buf));
     }
 
