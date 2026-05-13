@@ -172,8 +172,7 @@ export default function App() {
 
   useEffect(() => {
     connect()
-    const apiHost = window.location.host === 'localhost:5173' ? 'http://127.0.0.1:18789' : ''
-    fetch(`${apiHost}/settings/api/skills`).then(r=>r.json()).then(d => setSkills(d.skills || []))
+    fetch(`/settings/api/skills`).then(r=>r.json()).then(d => setSkills(d.skills || []))
     return () => { if(ws) ws.close() }
   }, [])
 
