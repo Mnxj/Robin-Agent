@@ -258,18 +258,40 @@ export default function App() {
             <div className="flex flex-col gap-1 pb-4 mt-2">
               <div className="text-xs font-semibold text-muted-foreground px-2 py-1 mb-1">Today</div>
               {sessions.map(s => (
-                <Button 
-                  key={s.key} 
-                  variant={activeSession === s.key ? "secondary" : "ghost"} 
-                  className={`w-full justify-start px-2 h-9 font-normal ${activeSession === s.key ? 'bg-muted hover:bg-muted/80' : 'hover:bg-muted/50'}`}
-                  onClick={() => {
-                    setActiveSession(s.key)
-                    if(ws) ws.send(JSON.stringify({ jsonrpc: '2.0', method: 'session.history', params: { agentId: activeAgent, sessionKey: s.key }, id: 'history' }))
-                  }}
-                >
-                  <MessageSquare className="w-4 h-4 mr-2 opacity-70" />
-                  <span className="truncate">{s.key.startsWith('ws_') ? s.key.slice(3) : s.key.startsWith('ws') ? s.key.slice(2) : s.key}</span>
-                </Button>
+                <div key={s.key} className="relative group">
+                  <Button 
+                    variant={activeSession === s.key ? "secondary" : "ghost"} 
+                    className={`w-full justify-start px-2 h-9 font-normal pr-8 ${activeSession === s.key ? 'bg-muted hover:bg-muted/80' : 'hover:bg-muted/50'}`}
+                    onClick={() => {
+                      setActiveSession(s.key)
+                      if(ws) ws.send(JSON.stringify({ jsonrpc: '2.0', method: 'session.history', params: { agentId: activeAgent, sessionKey: s.key }, id: 'history' }))
+                    }}
+                  >
+                    <MessageSquare className="w-4 h-4 mr-2 opacity-70 shrink-0" />
+                    <span className="truncate">{s.key.startsWith('ws_') ? s.key.slice(3) : s.key.startsWith('ws') ? s.key.slice(2) : s.key}</span>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1 h-7 w-7 opacity-0 group-hover:opacity-100 hover:text-red-500 hover:bg-red-500/10 transition-all"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (confirm(`Delete chat "${s.key.startsWith('ws_') ? s.key.slice(3) : s.key.startsWith('ws') ? s.key.slice(2) : s.key}"?`)) {
+                        ws?.send(JSON.stringify({ jsonrpc: '2.0', method: 'session.clear', params: { agentId: activeAgent, sessionKey: s.key }, id: 'clear-session' }))
+                        if (activeSession === s.key) {
+                          setActiveSession('ws_default')
+                          setMessages([])
+                        }
+                        // Refresh list
+                        setTimeout(() => {
+                          ws?.send(JSON.stringify({ jsonrpc: '2.0', method: 'session.list', params: { agentId: activeAgent }, id: 'sessions' }))
+                        }, 100)
+                      }
+                    }}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
               ))}
             </div>
           </ScrollArea>
