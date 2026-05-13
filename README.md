@@ -796,7 +796,7 @@ Robin-rust/
 ├── .github/workflows/
 │   └── release.yml             # Release CI (build + publish assets)
 ├── scripts/
-│   ├── build-all.sh            # Multi-platform packaging
+│   ├── build-all.sh            # Multi-platform packaging (compiles React web UI first)
 │   ├── publish.sh              # Upload dist/* to GitHub Release
 │   ├── clean-tool-logs.py      # Normalize tool-call logs
 │   ├── clean-chat.sh           # Batch wrapper for log cleaning
@@ -863,6 +863,15 @@ TAG=v0.1.0 ./scripts/publish.sh                    # publish dist/* to GitHub Re
 ./scripts/smoke-skill-memory.sh                    # verify skills + memory wiring against running gateway
 ./install.sh                                       # install robin from GitHub Release
 ```
+
+### Scripts
+
+The repository includes several utility scripts in the `scripts/` directory:
+
+- `build-all.sh`: Compiles the React web frontend (`npm run build`) and packages release binaries for multiple targets.
+- `smoke-skill-memory.sh`: Verifies backend health and the Skills/Memory REST API endpoints.
+- `clean-chat.sh` / `clean-tool-logs.py`: Utility scripts to clean and normalize tool-call logs.
+- `publish.sh`: Uploads `dist/*` artifacts to GitHub Releases.
 
 ### Key dependencies
 
