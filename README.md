@@ -80,6 +80,7 @@ cargo install cross
 Then build:
 
 ```bash
+cd web && npm install && npm run build             # build the React UI (required before cargo build)
 cargo build -p robin                               # CLI binary -> target/debug/robin
 cargo build --release -p robin                     # release binary -> target/release/robin
 ./scripts/build-all.sh                             # multi-target artifacts -> dist/
@@ -849,6 +850,7 @@ Plain files. Inspect with a text editor; back up with `rsync`; copy to another m
 Requires Rust 1.75+ (`rustup update stable`). For Linux/Windows cross-compilation install [cross](https://github.com/cross-rs/cross) (Docker-based).
 
 ```bash
+cd web && npm install && npm run build             # build the React UI (required before cargo build)
 cargo build -p robin                               # CLI binary (debug)
 cargo build --release -p robin                     # CLI binary (release)
 cargo test --workspace                             # run all tests

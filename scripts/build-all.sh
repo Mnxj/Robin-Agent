@@ -24,6 +24,9 @@ if [[ "$BUILD_TOOL" == "cross" ]] && ! command -v cross >/dev/null 2>&1; then
   BUILD_TOOL="cargo"
 fi
 
+echo "==> building web frontend"
+(cd "${ROOT_DIR}/web" && npm install && npm run build)
+
 build_target() {
   local target="$1"
   echo "==> building $target with $BUILD_TOOL"
