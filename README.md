@@ -808,7 +808,7 @@ Robin-rust/
 │   ├── package.json
 │   └── vite.config.ts          # Configured with vite-plugin-singlefile for inline bundling
 ├── crates/
-│   ├── robin/                  # CLI binary (robin chat, robin run)
+│   ├── robin/                  # CLI binary (robin chat, robin start)
 │   │   └── src/
 │   │       ├── main.rs         # Entry point + command dispatch
 │   │       ├── repl_ws.rs      # Interactive chat (WebSocket client)
