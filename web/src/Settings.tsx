@@ -17,6 +17,7 @@ export default function Settings() {
     if (path.startsWith('/logs')) return 'logs';
     if (path.startsWith('/jobs')) return 'jobs';
     if (path.startsWith('/ui')) return 'ui';
+    if (path.startsWith('/settings')) return 'config';
     return 'ui';
   })
   const [configObj, setConfigObj] = useState<any>({})
