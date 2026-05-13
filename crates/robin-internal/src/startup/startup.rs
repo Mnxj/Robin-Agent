@@ -276,6 +276,14 @@ pub fn start_gateway(config_path: &str, version: &str) -> anyhow::Result<crate::
     // Log buffer: ring buffer for /logs page
     let log_buffer = LogBuffer::new(2000);
 
+    // Initialize tracing to both stdout and the LogBuffer
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
+    let _ = tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer().with_ansi(true))
+        .with(crate::gateway::logs::LogBufferLayer::new(log_buffer.clone()))
+        .try_init();
+
     let opts = ServerOptions {
         auth_token,
         settings: Some(settings),
