@@ -4,12 +4,15 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { Trash2, Upload, FileText, Settings as SettingsIcon, BrainCircuit, Wrench } from 'lucide-react'
+import { Trash2, Upload, FileText, Settings as SettingsIcon, BrainCircuit, Wrench, Terminal, Clock, Activity } from 'lucide-react'
 
 import ConfigEditor from './ConfigEditor'
+import Logs from './Logs'
+import Jobs from './Jobs'
+import UI from './UI'
 
 export default function Settings() {
-  const [activeTab, setActiveTab] = useState('config')
+  const [activeTab, setActiveTab] = useState('ui')
   const [configObj, setConfigObj] = useState<any>({})
   const [skills, setSkills] = useState<any[]>([])
   const [memories, setMemories] = useState<any[]>([])
@@ -168,17 +171,20 @@ export default function Settings() {
   }
 
   useEffect(() => {
-    if (activeTab === 'config') loadConfig()
+    if (activeTab === 'config' || activeTab === 'ui') loadConfig()
     if (activeTab === 'skills') loadSkills()
     if (activeTab === 'memory') loadMemories()
     if (activeTab === 'tools') loadTools()
   }, [activeTab])
 
   const tabs = [
+    { id: 'ui', name: 'Control Panel', icon: <Activity className="w-4 h-4" /> },
     { id: 'config', name: 'Configuration', icon: <SettingsIcon className="w-4 h-4" /> },
     { id: 'skills', name: 'Skills', icon: <FileText className="w-4 h-4" /> },
     { id: 'memory', name: 'Memory', icon: <BrainCircuit className="w-4 h-4" /> },
     { id: 'tools', name: 'Tools', icon: <Wrench className="w-4 h-4" /> },
+    { id: 'jobs', name: 'Cron Jobs', icon: <Clock className="w-4 h-4" /> },
+    { id: 'logs', name: 'System Logs', icon: <Terminal className="w-4 h-4" /> },
   ]
 
   return (
@@ -226,6 +232,8 @@ export default function Settings() {
             {activeTab === 'config' && (
               <ConfigEditor initialConfig={configObj} onSave={saveConfig} />
             )}
+
+            {activeTab === 'ui' && <UI config={configObj} />}
 
             {activeTab === 'skills' && (
               <div className="space-y-4">
@@ -318,6 +326,9 @@ export default function Settings() {
                 </div>
               </div>
             )}
+
+            {activeTab === 'jobs' && <Jobs />}
+            {activeTab === 'logs' && <div className="h-[70vh]"><Logs /></div>}
 
           </div>
         </ScrollArea>

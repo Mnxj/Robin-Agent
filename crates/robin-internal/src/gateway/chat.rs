@@ -30,4 +30,4 @@ pub async fn chat_handler(port: u16) -> impl IntoResponse {
     response
 }
 
-const CHAT_HTML: &str = include_str!("../../../../web/dist/index.html");
+pub const CHAT_HTML: &str = include_str!("../../../../web/dist/index.html");
