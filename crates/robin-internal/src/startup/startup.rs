@@ -188,6 +188,39 @@ impl CronSchedulerAdapter {
     }
 }
 
+impl crate::gateway::websocket::JobSchedulerTrait for CronSchedulerAdapter {
+    fn list_jobs(&self) -> Vec<serde_json::Value> {
+        self.jobs.lock().iter().map(|j| {
+            serde_json::json!({
+                "name": j.name,
+                "schedule": j.schedule,
+                "prompt": j.prompt,
+                "paused": j.paused
+            })
+        }).collect()
+    }
+
+    fn pause_job(&self, name: &str) -> anyhow::Result<()> {
+        self.pause_job(name)
+    }
+
+    fn resume_job(&self, name: &str) -> anyhow::Result<()> {
+        self.resume_job(name)
+    }
+
+    fn remove_job(&self, name: &str) -> anyhow::Result<()> {
+        self.remove_job(name)
+    }
+
+    fn add_job(&self, name: &str, schedule: &str, prompt: &str) -> anyhow::Result<()> {
+        self.add_job(name, schedule, prompt)
+    }
+
+    fn update_job_schedule(&self, name: &str, schedule: &str) -> anyhow::Result<()> {
+        self.update_job_schedule(name, schedule)
+    }
+}
+
 /// start_gateway starts the full gateway and returns the result.
 /// The caller is responsible for calling Result.cleanup on shutdown.
 pub fn start_gateway(config_path: &str, version: &str) -> anyhow::Result<crate::startup::startup::Result> {
@@ -251,6 +284,11 @@ pub fn start_gateway(config_path: &str, version: &str) -> anyhow::Result<crate::
 
     let mut ws_state_inner = WebSocketHandlerState::new(config_surface, session_store);
     ws_state_inner.set_agent_builder(agent_builder);
+
+    let cron_adapter = Arc::new(CronSchedulerAdapter::new(&format!("{}/cron-jobs.json", data_dir)));
+    let _ = cron_adapter.restore();
+    ws_state_inner.set_job_scheduler(cron_adapter.clone());
+
     let ws_state = Arc::new(ws_state_inner);
 
     // Settings page — expose current config as JSON.
