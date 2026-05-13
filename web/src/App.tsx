@@ -268,7 +268,7 @@ export default function App() {
                   }}
                 >
                   <MessageSquare className="w-4 h-4 mr-2 opacity-70" />
-                  <span className="truncate">{s.key}</span>
+                  <span className="truncate">{s.key.startsWith('ws_') ? s.key.slice(3) : s.key.startsWith('ws') ? s.key.slice(2) : s.key}</span>
                 </Button>
               ))}
             </div>

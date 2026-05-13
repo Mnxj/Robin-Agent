@@ -151,7 +151,7 @@ impl Store {
             let de = de?;
             let name = de.file_name();
             let name_str = name.to_string_lossy();
-            if !name_str.ends_with(".jsonl") {
+            if !name_str.ends_with(".jsonl") || !name_str.starts_with("ws") {
                 continue;
             }
 
