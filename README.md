@@ -18,7 +18,7 @@ Robin connects you (via CLI or web chat) to LLMs — Claude, GPT, Gemini, Qwen, 
 **Interfaces**
 
 - Single binary, no runtime dependencies. Download and run.
-- macOS / Windows system tray app that runs the gateway in the background and serves a web chat at `http://127.0.0.1:18789/chat`.
+- macOS / Windows system tray app that runs the gateway in the background and serves a React-based single-page application at `http://127.0.0.1:18789/chat` with integrated settings, logs, and cron job management.
 - `robin chat` CLI that auto-detects a running gateway and shares its session, memory, and MCP state — start in the browser, continue in the terminal.
 - WebSocket JSON-RPC 2.0 control plane for programmatic access.
 
@@ -55,6 +55,7 @@ Robin connects you (via CLI or web chat) to LLMs — Claude, GPT, Gemini, Qwen, 
 **Operations**
 
 - All state in `~/.robin/` as plain files. No external database.
+- The web UI is built with React and Tailwind CSS, bundled directly into the Rust binary to preserve the zero-dependency deployment model.
 - OpenTelemetry export (opt-in): traces, metrics, and logs to any OTLP/HTTP collector via config or standard `OTEL_*` env vars.
 - Localhost-only by default; optional bearer token auth on all HTTP and WebSocket endpoints.
 
@@ -800,8 +801,13 @@ Robin-rust/
 │   ├── clean-chat.sh           # Batch wrapper for log cleaning
 │   └── smoke-skill-memory.sh   # Skills/Memory API wiring smoke test
 ├── dist/                       # Build artifacts
+├── web/                        # React single-page application (UI, Settings, Logs, Jobs)
+│   ├── src/
+│   ├── index.html
+│   ├── package.json
+│   └── vite.config.ts          # Configured with vite-plugin-singlefile for inline bundling
 ├── crates/
-│   ├── robin/                  # CLI binary (robin)
+│   ├── robin/                  # CLI binary (robin chat, robin run)
 │   │   └── src/
 │   │       ├── main.rs         # Entry point + command dispatch
 │   │       ├── repl_ws.rs      # Interactive chat (WebSocket client)
@@ -827,7 +833,7 @@ All state lives in `~/.robin/` (Windows: `C:\Users\<you>\.robin\`):
 
 ```
 robin.json5             # Configuration
-sessions/               # Conversation history (JSONL, one file per agent+session)
+sessions/               # Conversation history (JSONL, stored flatly in this directory)
 memory/entries/         # Memory entries (Markdown)
 skills/                 # User skills (SKILL.md); bundled starters seeded on first run
 workspace-<agentId>/    # Per-agent workspace (IDENTITY.md, ROBIN.md, AGENTS.md, skills/)
