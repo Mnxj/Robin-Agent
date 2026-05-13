@@ -12,7 +12,13 @@ import Jobs from './Jobs'
 import UI from './UI'
 
 export default function Settings() {
-  const [activeTab, setActiveTab] = useState('ui')
+  const [activeTab, setActiveTab] = useState(() => {
+    const path = window.location.pathname;
+    if (path.startsWith('/logs')) return 'logs';
+    if (path.startsWith('/jobs')) return 'jobs';
+    if (path.startsWith('/ui')) return 'ui';
+    return 'ui';
+  })
   const [configObj, setConfigObj] = useState<any>({})
   const [skills, setSkills] = useState<any[]>([])
   const [memories, setMemories] = useState<any[]>([])

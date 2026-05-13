@@ -4,7 +4,8 @@ import './index.css'
 import App from './App.tsx'
 import Settings from './Settings.tsx'
 
-const isSettings = window.location.pathname.startsWith('/settings')
+const path = window.location.pathname
+const isSettings = path.startsWith('/settings') || path === '/logs' || path === '/jobs' || path === '/ui'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
