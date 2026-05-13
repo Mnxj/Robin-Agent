@@ -48,7 +48,9 @@ fn json_error_resp(status: StatusCode, msg: &str) -> Response {
 
 /// Handler: GET /settings  (serves the settings HTML page)
 pub async fn settings_page_handler() -> impl IntoResponse {
-    let mut resp = Html(SETTINGS_HTML).into_response();
+    // Serve the same React frontend index.html as the Chat UI.
+    // The React app will route to <Settings /> based on window.location.pathname.
+    let mut resp = Html(crate::gateway::chat::CHAT_HTML).into_response();
     resp.headers_mut().insert(
         header::CACHE_CONTROL,
         header::HeaderValue::from_static("no-store"),
@@ -187,4 +189,4 @@ pub async fn bootstrap_status_handler(
     }
 }
 
-const SETTINGS_HTML: &str = include_str!("settings_template.html");
+// The SETTINGS_HTML is no longer needed since it's now handled by the React app.
