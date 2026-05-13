@@ -221,6 +221,61 @@ impl crate::gateway::websocket::JobSchedulerTrait for CronSchedulerAdapter {
     }
 }
 
+impl crate::tools::JobScheduler for CronSchedulerAdapter {
+    fn add_job(&self, name: &str, schedule: &str, prompt: &str) -> anyhow::Result<()> {
+        self.add_job(name, schedule, prompt)
+    }
+    fn remove_job(&self, name: &str) -> anyhow::Result<()> {
+        self.remove_job(name)
+    }
+    fn list_jobs(&self) -> Vec<crate::tools::JobInfo> {
+        self.list_jobs().into_iter().map(|j| crate::tools::JobInfo {
+            name: j.name,
+            schedule: j.schedule,
+            prompt: j.prompt,
+            paused: j.paused,
+        }).collect()
+    }
+    fn pause_job(&self, name: &str) -> anyhow::Result<()> {
+        self.pause_job(name)
+    }
+    fn resume_job(&self, name: &str) -> anyhow::Result<()> {
+        self.resume_job(name)
+    }
+    fn update_job_schedule(&self, name: &str, schedule: &str) -> anyhow::Result<()> {
+        self.update_job_schedule(name, schedule)
+    }
+}
+
+#[derive(Clone)]
+struct ArcCronSchedulerAdapter(Arc<CronSchedulerAdapter>);
+
+impl crate::tools::JobScheduler for ArcCronSchedulerAdapter {
+    fn add_job(&self, name: &str, schedule: &str, prompt: &str) -> anyhow::Result<()> {
+        self.0.add_job(name, schedule, prompt)
+    }
+    fn remove_job(&self, name: &str) -> anyhow::Result<()> {
+        self.0.remove_job(name)
+    }
+    fn list_jobs(&self) -> Vec<crate::tools::JobInfo> {
+        self.0.list_jobs().into_iter().map(|j| crate::tools::JobInfo {
+            name: j.name,
+            schedule: j.schedule,
+            prompt: j.prompt,
+            paused: j.paused,
+        }).collect()
+    }
+    fn pause_job(&self, name: &str) -> anyhow::Result<()> {
+        self.0.pause_job(name)
+    }
+    fn resume_job(&self, name: &str) -> anyhow::Result<()> {
+        self.0.resume_job(name)
+    }
+    fn update_job_schedule(&self, name: &str, schedule: &str) -> anyhow::Result<()> {
+        self.0.update_job_schedule(name, schedule)
+    }
+}
+
 /// start_gateway starts the full gateway and returns the result.
 /// The caller is responsible for calling Result.cleanup on shutdown.
 pub fn start_gateway(config_path: &str, version: &str) -> anyhow::Result<crate::startup::startup::Result> {
@@ -275,18 +330,19 @@ pub fn start_gateway(config_path: &str, version: &str) -> anyhow::Result<crate::
         std::path::PathBuf::from(&data_dir).join("memory"),
     ));
 
+    let cron_adapter = Arc::new(CronSchedulerAdapter::new(&format!("{}/cron-jobs.json", data_dir)));
+    let _ = cron_adapter.restore();
+
     let agent_builder: Arc<dyn AgentBuilder> = Arc::new(AgentBuilderImpl {
         config: cfg.clone(),
         session_store: session_store_inner,
         skill_loader: skill_loader.clone(),
         memory_manager: memory_manager.clone(),
+        cron_adapter: Some(cron_adapter.clone()),
     });
 
     let mut ws_state_inner = WebSocketHandlerState::new(config_surface, session_store);
     ws_state_inner.set_agent_builder(agent_builder);
-
-    let cron_adapter = Arc::new(CronSchedulerAdapter::new(&format!("{}/cron-jobs.json", data_dir)));
-    let _ = cron_adapter.restore();
     ws_state_inner.set_job_scheduler(cron_adapter.clone());
 
     let ws_state = Arc::new(ws_state_inner);
@@ -295,7 +351,7 @@ pub fn start_gateway(config_path: &str, version: &str) -> anyhow::Result<crate::
     let config_json = serde_json::to_value(&*cfg)
         .unwrap_or(serde_json::Value::Object(Default::default()));
     let settings_tool_registry =
-        build_tool_registry(&data_dir, &data_dir, skill_loader.clone(), bash_policy.clone());
+        build_tool_registry(&data_dir, &data_dir, skill_loader.clone(), bash_policy.clone(), Some(cron_adapter.clone()));
     let settings = SettingsHandlerState {
         config_json: Arc::new(parking_lot::RwLock::new(config_json)),
         config_path: cfg_path,
@@ -449,6 +505,7 @@ pub async fn build_in_process_runtime(
                 &cfg.data_dir(),
                 skill_loader.clone(),
                 bash_policy,
+                None,
             ) as Arc<dyn Executor>
         ),
         session: Some(session),
@@ -483,8 +540,13 @@ fn build_tool_registry(
     data_dir: &str,
     skill_loader: Arc<SkillLoader>,
     bash_policy: Option<ExecPolicy>,
+    cron_adapter: Option<Arc<CronSchedulerAdapter>>,
 ) -> Arc<ToolRegistry> {
     let reg = Arc::new(ToolRegistry::new());
+
+    if let Some(cron) = cron_adapter {
+        reg.register(crate::tools::CronTool::new(Box::new(ArcCronSchedulerAdapter(cron))));
+    }
 
     reg.register(ReadFileTool {
         work_dir: work_dir.to_string(),
@@ -717,6 +779,7 @@ struct AgentBuilderImpl {
     session_store: Arc<SessionStore>,
     skill_loader: Arc<SkillLoader>,
     memory_manager: Arc<MemoryManager>,
+    cron_adapter: Option<Arc<CronSchedulerAdapter>>,
 }
 
 impl AgentBuilder for AgentBuilderImpl {
@@ -729,6 +792,7 @@ impl AgentBuilder for AgentBuilderImpl {
         let store = self.session_store.clone();
         let skill_loader = self.skill_loader.clone();
         let memory_manager = self.memory_manager.clone();
+        let cron_adapter = self.cron_adapter.clone();
         let agent_id = agent_id.to_string();
         let session_key = session_key.to_string();
 
@@ -770,6 +834,7 @@ impl AgentBuilder for AgentBuilderImpl {
                         &config.data_dir(),
                         skill_loader.clone(),
                         bash_policy,
+                        cron_adapter.clone(),
                     ) as Arc<dyn Executor>
                 ),
                 session: Some(session),
