@@ -276,8 +276,10 @@ export default function App() {
           </ScrollArea>
           
           <div className="p-3 border-t bg-background/50 flex flex-col gap-1">
-            <Button variant="ghost" className="w-full justify-start h-10 px-2 font-normal" onClick={() => window.open('/settings', '_blank')}>
-              <Settings className="w-4 h-4 mr-3 opacity-70" /> Settings
+            <Button variant="ghost" className="w-full justify-start h-10 px-2 font-normal" asChild>
+              <a href="/settings" target="_blank" rel="noopener noreferrer">
+                <Settings className="w-4 h-4 mr-3 opacity-70" /> Settings
+              </a>
             </Button>
           </div>
         </div>
