@@ -4,11 +4,13 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { Trash2, Save, Upload, FileText, Settings as SettingsIcon, BrainCircuit, Wrench, FileJson } from 'lucide-react'
+import { Trash2, Upload, FileText, Settings as SettingsIcon, BrainCircuit, Wrench } from 'lucide-react'
+
+import ConfigEditor from './ConfigEditor'
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('config')
-  const [configStr, setConfigStr] = useState('')
+  const [configObj, setConfigObj] = useState<any>({})
   const [skills, setSkills] = useState<any[]>([])
   const [memories, setMemories] = useState<any[]>([])
   const [tools, setTools] = useState<any[]>([])
@@ -33,24 +35,23 @@ export default function Settings() {
   const loadConfig = async () => {
     try {
       const res = await fetch('/settings/api/config')
-      const data = await res.text()
-      setConfigStr(data)
+      const data = await res.json()
+      setConfigObj(data)
     } catch (e: any) {
       showStatus('Failed to load config: ' + e.message, true)
     }
   }
 
-  const saveConfig = async () => {
+  const saveConfig = async (newCfg: any) => {
     try {
-      // Validate JSON
-      JSON.parse(configStr)
       const res = await fetch('/settings/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: configStr
+        body: JSON.stringify(newCfg)
       })
       if (!res.ok) throw new Error('Failed to save')
       showStatus('Configuration saved successfully')
+      setConfigObj(newCfg)
     } catch (e: any) {
       showStatus('Invalid JSON or save failed: ' + e.message, true)
     }
@@ -174,7 +175,7 @@ export default function Settings() {
   }, [activeTab])
 
   const tabs = [
-    { id: 'config', name: 'Config JSON', icon: <FileJson className="w-4 h-4" /> },
+    { id: 'config', name: 'Configuration', icon: <SettingsIcon className="w-4 h-4" /> },
     { id: 'skills', name: 'Skills', icon: <FileText className="w-4 h-4" /> },
     { id: 'memory', name: 'Memory', icon: <BrainCircuit className="w-4 h-4" /> },
     { id: 'tools', name: 'Tools', icon: <Wrench className="w-4 h-4" /> },
@@ -223,18 +224,7 @@ export default function Settings() {
           <div className="max-w-4xl mx-auto space-y-6">
             
             {activeTab === 'config' && (
-              <div className="space-y-4">
-                <div className="text-sm text-muted-foreground">
-                  Directly edit the <code>robin.json5</code> configuration file. Note: This requires valid JSON. Restart Robin for some changes to take effect.
-                </div>
-                <Textarea 
-                  value={configStr} 
-                  onChange={e => setConfigStr(e.target.value)} 
-                  className="min-h-[500px] font-mono text-sm"
-                  spellCheck={false}
-                />
-                <Button onClick={saveConfig}><Save className="w-4 h-4 mr-2"/> Save Configuration</Button>
-              </div>
+              <ConfigEditor initialConfig={configObj} onSave={saveConfig} />
             )}
 
             {activeTab === 'skills' && (
