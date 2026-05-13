@@ -51,12 +51,12 @@ export default function Jobs() {
     setJobName(''); setJobSchedule(''); setJobPrompt('')
   }
 
-  const toggleJob = (name: string, active: boolean) => {
+  const toggleJob = (name: string, paused: boolean) => {
     ws?.send(JSON.stringify({
       jsonrpc: '2.0',
-      method: active ? 'jobs.pause' : 'jobs.resume',
+      method: paused ? 'jobs.resume' : 'jobs.pause',
       params: { name },
-      id: active ? 'jobs-pause' : 'jobs-resume'
+      id: paused ? 'jobs-resume' : 'jobs-pause'
     }))
   }
 
@@ -92,16 +92,16 @@ export default function Jobs() {
             {jobs.length === 0 ? (
               <tr><td colSpan={5} className="p-4 text-center text-muted-foreground">No cron jobs configured.</td></tr>
             ) : jobs.map(j => (
-              <tr key={j.name} className={`border-b last:border-0 ${!j.active ? 'opacity-50 bg-muted/20' : ''}`}>
+              <tr key={j.name} className={`border-b last:border-0 ${j.paused ? 'opacity-50 bg-muted/20' : ''}`}>
                 <td className="p-3">
-                  <div className={`w-2 h-2 rounded-full ${j.active ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                  <div className={`w-2 h-2 rounded-full ${!j.paused ? 'bg-green-500' : 'bg-gray-400'}`}></div>
                 </td>
                 <td className="p-3 font-medium">{j.name}</td>
                 <td className="p-3 font-mono text-xs">{j.schedule}</td>
                 <td className="p-3 truncate max-w-[200px]" title={j.prompt}>{j.prompt}</td>
                 <td className="p-3 text-right space-x-2">
-                  <Button variant="ghost" size="sm" onClick={() => toggleJob(j.name, j.active)}>
-                    {j.active ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                  <Button variant="ghost" size="sm" onClick={() => toggleJob(j.name, j.paused)}>
+                    {!j.paused ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                   </Button>
                   <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-600" onClick={() => removeJob(j.name)}>
                     <Trash2 className="w-4 h-4" />
