@@ -42,7 +42,6 @@ While official tools like Claude's *Computer Use* focus on **Vision-based GUI si
 **Memory & knowledge**
 
 - Persistent memory: BM25 lexical search over Markdown files, recalled automatically each turn. Optional vector search when an embedding provider is configured.
-- Cortex knowledge graph (SQLite) that ingests completed conversations and surfaces relevant facts on subsequent turns.
 - Skill system: Markdown files with YAML frontmatter, exposed to the model via a system-prompt Skills Index, then lazily loaded on demand via `load_skill`. Bundled starters (`ffmpeg`, `imagemagick`, `pandoc`, `pdftotext`, `cortex`) are seeded on first run; user skills are managed live from the Settings UI.
 
 **Agents & tools**
