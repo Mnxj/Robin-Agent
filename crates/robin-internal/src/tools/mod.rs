@@ -14,6 +14,7 @@ pub mod browser;
 pub mod cron;
 pub mod sendmessage;
 pub mod task;
+pub mod manage_memory;
 
 pub mod todo;
 
@@ -45,4 +46,5 @@ pub use browser::{BrowserTool, BrowserSession, BrowserInputForTest, new_browser_
 pub use cron::{CronTool, JobInfo, JobScheduler};
 pub use sendmessage::{SendMessageTool, SendMessageRegistration, register_send_message};
 pub use task::{TaskTool, AgentEventLike, SubagentRunner, SubagentFactory};
+pub use manage_memory::ManageCoreMemoryTool;
 pub use todo::{TodoWriteTool, TodoItem, TodoStatus, format_todos};

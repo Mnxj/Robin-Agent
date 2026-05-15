@@ -414,7 +414,7 @@ pub fn start_gateway(config_path: &str, version: &str) -> anyhow::Result<crate::
     let config_json = serde_json::to_value(&*cfg)
         .unwrap_or(serde_json::Value::Object(Default::default()));
     let settings_tool_registry =
-        build_tool_registry(&data_dir, &data_dir, skill_loader.clone(), bash_policy.clone(), Some(cron_adapter.clone()));
+        build_tool_registry(&data_dir, &data_dir, skill_loader.clone(), bash_policy.clone(), Some(cron_adapter.clone()), Some(memory_manager.clone()));
     let settings = SettingsHandlerState {
         config_json: Arc::new(parking_lot::RwLock::new(config_json)),
         config_path: cfg_path,
@@ -563,14 +563,15 @@ pub async fn build_in_process_runtime(
     let inputs = RuntimeInputs {
         provider: Some(provider),
         tools: Some(
-            build_tool_registry(
-                &agent_cfg.workspace,
-                &cfg.data_dir(),
-                skill_loader.clone(),
-                bash_policy,
-                None,
-            ) as Arc<dyn Executor>
-        ),
+                    build_tool_registry(
+                        &agent_cfg.workspace,
+                        &cfg.data_dir(),
+                        skill_loader.clone(),
+                        bash_policy,
+                        None,
+                        memory_manager.clone(),
+                    ) as Arc<dyn Executor>
+                ),
         session: Some(session),
         skills_index: skill_loader.format_index(),
         memory_index,
@@ -604,6 +605,7 @@ fn build_tool_registry(
     skill_loader: Arc<SkillLoader>,
     bash_policy: Option<ExecPolicy>,
     cron_adapter: Option<Arc<CronSchedulerAdapter>>,
+    memory_manager: Option<Arc<MemoryManager>>,
 ) -> Arc<ToolRegistry> {
     let reg = Arc::new(ToolRegistry::new());
 
@@ -641,6 +643,29 @@ fn build_tool_registry(
         let path = memory_entries_dir.join(format!("{}.md", id));
         std::fs::read_to_string(path).ok()
     }));
+
+    if let Some(mem_mgr) = memory_manager {
+        let mem_add = mem_mgr.clone();
+        let mem_upd = mem_mgr.clone();
+        let mem_del = mem_mgr.clone();
+        reg.register(crate::tools::ManageCoreMemoryTool::new(
+            move |id, content| {
+                tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current().block_on(mem_add.save(id, content))
+                })
+            },
+            move |id, title, content| {
+                tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current().block_on(mem_upd.save(id, &format!("{}\n\n{}", title, content)))
+                })
+            },
+            move |id| {
+                tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current().block_on(mem_del.delete(id))
+                })
+            },
+        ));
+    }
 
     register_send_message(&reg, None);
     reg
@@ -898,6 +923,7 @@ impl AgentBuilder for AgentBuilderImpl {
                         skill_loader.clone(),
                         bash_policy,
                         cron_adapter.clone(),
+                        Some(memory_manager.clone()),
                     ) as Arc<dyn Executor>
                 ),
                 session: Some(session),
