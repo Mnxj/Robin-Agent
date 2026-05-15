@@ -22,6 +22,7 @@ use super::runtime::Runtime;
 /// Long-lived dependencies that every Runtime in this process shares. Built
 /// once at startup and reused for every Runtime construction (including
 /// subagent runtimes built by the task tool factory).
+#[derive(Clone)]
 pub struct RuntimeDeps {
     /// Resolved permission checker for all agents (shared across runtimes).
     pub permission: Option<Arc<dyn PermissionChecker>>,

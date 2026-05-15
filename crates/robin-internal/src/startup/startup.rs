@@ -914,18 +914,18 @@ impl AgentBuilder for AgentBuilderImpl {
                 ..Default::default()
             };
             let bash_policy = bash_exec_policy(&config);
+            let tool_reg = build_tool_registry(
+                &agent_cfg.workspace,
+                &config.data_dir(),
+                skill_loader.clone(),
+                bash_policy,
+                cron_adapter.clone(),
+                Some(memory_manager.clone()),
+            );
+
             let inputs = RuntimeInputs {
                 provider: Some(provider),
-                tools: Some(
-                    build_tool_registry(
-                        &agent_cfg.workspace,
-                        &config.data_dir(),
-                        skill_loader.clone(),
-                        bash_policy,
-                        cron_adapter.clone(),
-                        Some(memory_manager.clone()),
-                    ) as Arc<dyn Executor>
-                ),
+                tools: Some(tool_reg.clone() as Arc<dyn Executor>),
                 session: Some(session),
                 skills_index: skill_loader.format_index(),
                 memory_index: {
@@ -934,11 +934,61 @@ impl AgentBuilder for AgentBuilderImpl {
                     }
                     memory_manager.format_index()
                 },
-                memory_manager: Some(memory_manager),
+                memory_manager: Some(memory_manager.clone()),
                 ..Default::default()
             };
 
-            let runtime = Arc::new(build_runtime_for_agent(deps, inputs, &agent_cfg)?);
+            let runtime = Arc::new(build_runtime_for_agent(deps.clone(), inputs, &agent_cfg)?);
+
+            let eligible = config.eligible_subagents();
+            if !eligible.is_empty() {
+                let f_config = config.clone();
+                let f_skill_loader = skill_loader.clone();
+                let f_cron_adapter = cron_adapter.clone();
+                let f_memory_manager = memory_manager.clone();
+                
+                let build_inputs: crate::agent::subagent::SubagentBuildFn = Box::new(move |sub_a: &crate::config::config::AgentConfig| {
+                    let sub_provider_name = sub_a.model.split('/').next().unwrap_or("anthropic");
+                    let sub_pcfg = f_config.get_provider(sub_provider_name);
+                    let sub_provider: Arc<dyn crate::llm::LLMProvider> = Arc::from(crate::llm::new_provider(sub_provider_name, crate::llm::ProviderOptions {
+                        api_key: sub_pcfg.api_key.clone(),
+                        base_url: sub_pcfg.base_url.clone(),
+                        kind: sub_pcfg.kind.clone(),
+                        ca_bundle: sub_pcfg.ca_bundle.clone(),
+                    })?);
+
+                    let sub_bash_policy = bash_exec_policy(&f_config);
+                    let sub_tool_reg = build_tool_registry(
+                        &sub_a.workspace,
+                        &f_config.data_dir(),
+                        f_skill_loader.clone(),
+                        sub_bash_policy,
+                        f_cron_adapter.clone(),
+                        Some(f_memory_manager.clone()),
+                    );
+                    
+                    Ok(RuntimeInputs {
+                        provider: Some(sub_provider),
+                        tools: Some(sub_tool_reg as Arc<dyn Executor>),
+                        session: Some(crate::agent::subagent::new_subagent_session(&sub_a.id)),
+                        skills_index: f_skill_loader.format_index(),
+                        memory_index: f_memory_manager.format_index(),
+                        memory_manager: Some(f_memory_manager.clone()),
+                        ..Default::default()
+                    })
+                });
+
+                let factory = crate::agent::subagent::make_subagent_factory(
+                    config.clone(),
+                    deps,
+                    build_inputs,
+                    runtime.clone(),
+                );
+
+                let task_tool = crate::tools::TaskTool::new(factory, runtime.depth, eligible);
+                tool_reg.register(task_tool);
+            }
+
             Ok(Arc::new(RuntimeAdapter(runtime)) as Arc<dyn AgentRuntime>)
         })
     }
