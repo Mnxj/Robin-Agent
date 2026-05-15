@@ -13,6 +13,16 @@ Robin connects you (via CLI or web chat) to LLMs — Claude, GPT, Gemini, Qwen, 
 3. **Usable out of the box by non-technical people.** The default install — no config edits, no API keys, no `vim` — must just work. Advanced configuration can be as complex as it needs to be, but it must not be in the way of the default path.
 4. **Secure by default.** An agent that can read files, run shell commands, and make web requests is genuinely powerful — defaults have to protect users who won't read the security docs. Robin binds to localhost only, ships the bash tool in allowlist mode rather than full shell access, blocks web requests to internal IP ranges and cloud metadata endpoints, contains file access to each agent's workspace with symlink resolution, and writes config and session files with owner-only permissions. You can relax any of it deliberately; you don't have to opt out of it.
 
+## Robin vs. Claude's "Computer Use"
+
+While official tools like Claude's *Computer Use* focus on **Vision-based GUI simulation** (taking screenshots and moving the mouse), Robin takes a **developer-centric, API-first** approach to automation:
+
+*   **Speed & Precision:** Instead of reading pixels and guessing where to click, Robin uses **Tool Calling** to directly execute system-level operations (Bash, File I/O, Web Requests). It is blazing fast, highly reliable, and unaffected by UI pop-ups or screen resolutions.
+*   **Model Agnosticism:** You are not locked into the Claude ecosystem. Robin allows you to route tasks dynamically: use GPT-4o for coding, Gemini for fast search, or a local Qwen model for privacy.
+*   **Long-Term Memory:** Robin automatically saves your preferences, coding habits, and project context into a local Vector Database, recalling them silently on every turn via the `manage_core_memory` tool. Official chat windows lose context when closed.
+*   **Background Automation:** Robin acts as a persistent daemon. You can ask it to create **Cron Jobs** (e.g., *"pull this repo and summarize changes every morning at 9 AM"*), which are managed independently and run silently in the background.
+*   **Subagent Delegation:** Complex workflows can be delegated to specialized **Subagents** via the `task` tool, allowing a supervisor agent to orchestrate workers with different system prompts and restricted toolsets.
+
 ## Features
 
 **Interfaces**
