@@ -81,6 +81,8 @@ pub struct JobInfo {
 pub struct CronSchedulerAdapter {
     pub jobs_file: String,
     jobs: parking_lot::Mutex<Vec<PersistedJob>>,
+    scheduler: Arc<crate::cron::cron::Scheduler>,
+    agent_builder: parking_lot::RwLock<Option<Arc<dyn AgentBuilder>>>,
 }
 
 impl CronSchedulerAdapter {
@@ -88,22 +90,78 @@ impl CronSchedulerAdapter {
         CronSchedulerAdapter {
             jobs_file: jobs_file.to_string(),
             jobs: parking_lot::Mutex::new(vec![]),
+            scheduler: Arc::new(crate::cron::cron::Scheduler::new()),
+            agent_builder: parking_lot::RwLock::new(None),
         }
     }
 
+    pub fn set_agent_builder(&self, ab: Arc<dyn AgentBuilder>) {
+        *self.agent_builder.write() = Some(ab);
+    }
+
+    pub fn start_scheduler(&self, cancel: tokio_util::sync::CancellationToken) {
+        // sync all current jobs to the scheduler
+        let jobs = self.jobs.lock().clone();
+        for j in jobs {
+            if !j.paused {
+                if let Some(cron_job) = self.create_cron_job(&j) {
+                    let _ = self.scheduler.add(cron_job);
+                }
+            }
+        }
+        self.scheduler.start(cancel);
+    }
+
+    fn create_cron_job(&self, pj: &PersistedJob) -> Option<crate::cron::cron::Job> {
+        let ab_lock = self.agent_builder.read();
+        let ab_opt = ab_lock.clone()?;
+
+        let agent_fn: crate::cron::cron::AgentFunc = Arc::new(move |_cancel, prompt| {
+            let ab = ab_opt.clone();
+            Box::pin(async move {
+                let agent = ab.build("default", "ws_default").await?;
+                let mut rx = agent.run(prompt, vec![]).await?;
+                let mut full = String::new();
+                while let Some(ev) = rx.recv().await {
+                    match ev {
+                        crate::gateway::websocket::AgentEvent::TextDelta(t) => full.push_str(&t),
+                        crate::gateway::websocket::AgentEvent::Error(e) => return Err(anyhow::anyhow!(e)),
+                        _ => {}
+                    }
+                }
+                Ok(full)
+            })
+        });
+
+        Some(crate::cron::cron::Job {
+            name: pj.name.clone(),
+            schedule: pj.schedule.clone(),
+            prompt: pj.prompt.clone(),
+            paused: pj.paused,
+            agent_fn,
+            output_fn: None,
+            interval: std::time::Duration::from_secs(0),
+        })
+    }
+
     pub fn add_job(&self, name: &str, schedule: &str, prompt: &str) -> anyhow::Result<()> {
-        self.jobs.lock().push(PersistedJob {
+        let pj = PersistedJob {
             name: name.to_string(),
             schedule: schedule.to_string(),
             prompt: prompt.to_string(),
             paused: false,
-        });
+        };
+        self.jobs.lock().push(pj.clone());
+        if let Some(cj) = self.create_cron_job(&pj) {
+            let _ = self.scheduler.add(cj);
+        }
         self.persist();
         Ok(())
     }
 
     pub fn remove_job(&self, name: &str) -> anyhow::Result<()> {
         self.jobs.lock().retain(|j| j.name != name);
+        let _ = self.scheduler.remove(name);
         self.persist();
         Ok(())
     }
@@ -121,6 +179,7 @@ impl CronSchedulerAdapter {
         let mut jobs = self.jobs.lock();
         if let Some(j) = jobs.iter_mut().find(|j| j.name == name) {
             j.paused = true;
+            let _ = self.scheduler.remove(name); // removing from active scheduler pauses it
             drop(jobs);
             self.persist();
             Ok(())
@@ -133,7 +192,11 @@ impl CronSchedulerAdapter {
         let mut jobs = self.jobs.lock();
         if let Some(j) = jobs.iter_mut().find(|j| j.name == name) {
             j.paused = false;
+            let pj = j.clone();
             drop(jobs);
+            if let Some(cj) = self.create_cron_job(&pj) {
+                let _ = self.scheduler.add(cj);
+            }
             self.persist();
             Ok(())
         } else {
